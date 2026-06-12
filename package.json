@@ -10,6 +10,7 @@
     "infra:up": "docker-compose -f infrastructure/docker/docker-compose.yml up -d",
     "infra:down": "docker-compose -f infrastructure/docker/docker-compose.yml down",
     "infra:init": "cd infrastructure/regtest-setup && ./init.sh",
+    "db:seed": "ts-node database/seed.ts",
     "dev": "./scripts/start-dev.sh",
     "warp": "./scripts/simulate-death.sh",
     "gen-vault": "./scripts/generate-vault.sh"
@@ -25,6 +26,9 @@
   "author": "Continuum Team",
   "license": "MIT",
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@types/pg": "^8.20.0",
+    "concurrently": "^8.2.2",
+    "pg": "^8.21.0",
+    "ts-node": "^10.9.2"
   }
 }
