@@ -1,17 +1,23 @@
 #!/bin/bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Source the central environment variables into this bash context shell
-if [ -f /workspaces/Continuum/.env ]; then
-    export $(cat /workspaces/Continuum/.env | grep -v '^#' | xargs)
+if [ -f "$ROOT_DIR/.env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "$ROOT_DIR/.env"
+    set +a
 fi
 
 echo "🚀 Launching Continuum Backend Microservice Instance..."
-cd /workspaces/Continuum/apps/api
+cd "$ROOT_DIR/apps/api"
 go run cmd/server/main.go &
 API_PID=$!
 
 echo "⚛️ Starting Web Interface Server Engine..."
-cd /workspaces/Continuum/apps/web
+cd "$ROOT_DIR/apps/web"
 npm run dev &
 WEB_PID=$!
 
