@@ -8,6 +8,7 @@ services:
       - BITCOIN_DATA=/data
     volumes:
       - bitcoin_data:/data
+      - ./bitcoin.conf:/data/bitcoin.conf
     ports:
       - "18443:18443"
       - "18444:18444"
@@ -31,6 +32,7 @@ services:
       - "8081:8080"
     volumes:
       - lnd_data:/root/.lnd
+      - ./lnd.conf:/root/.lnd/lnd.conf
     command:
       - --bitcoin.active
       - --bitcoin.regtest
