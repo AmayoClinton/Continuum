@@ -30,34 +30,74 @@ async function seedDatabase() {
     })).toString('base64');
 
     console.log("📥 Injecting hackathon user demo records...");
+    const ownerPubkey = '02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const operatorPubkey = '03bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    const activeBeneficiary = '02e9a2631247d5124b893a71b25076eefc432d56a29851a7eef1109bcfa0329a1d';
+    const dormantBeneficiary = '03b41178cd224b893a71b25076eefc432d56a29851a7eef1109bcfa0329a1df27b';
 
     // Record A: Active Shielded State Scenario
     await client.query(`
-      INSERT INTO vaults (id, alias, beneficiary_pubkey, encrypted_payload, check_in_interval_seconds, last_check_in_at, status)
+      INSERT INTO vaults (
+        id,
+        alias,
+        beneficiary_pubkey,
+        encrypted_payload,
+        check_in_interval_seconds,
+        last_check_in_at,
+        status,
+        multisig_required,
+        multisig_pubkeys,
+        multisig_address,
+        multisig_descriptor,
+        multisig_network
+      )
       VALUES (
         'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
         'Satoshi_Legacy_Vault',
-        '02e9a2631247d5124b893a71b25076eefc432d56a29851a7eef1109bcfa0329a1d',
+        $2,
         $1,
         86400, -- 24 Hour check-in safety window
         NOW(), -- Checked in just now
-        'ACTIVE'
+        'ACTIVE',
+        2,
+        ARRAY[$2, $3, $4],
+        'offline-regtest-preview',
+        'wsh(sortedmulti(2,' || $2 || ',' || $3 || ',' || $4 || '))',
+        'regtest'
       );
-    `, [activePayload]);
+    `, [activePayload, activeBeneficiary, ownerPubkey, operatorPubkey]);
 
     // Record B: Expired Dormant Stage Scenario (Ready for Bob to extract on stage)
     await client.query(`
-      INSERT INTO vaults (id, alias, beneficiary_pubkey, encrypted_payload, check_in_interval_seconds, last_check_in_at, status)
+      INSERT INTO vaults (
+        id,
+        alias,
+        beneficiary_pubkey,
+        encrypted_payload,
+        check_in_interval_seconds,
+        last_check_in_at,
+        status,
+        multisig_required,
+        multisig_pubkeys,
+        multisig_address,
+        multisig_descriptor,
+        multisig_network
+      )
       VALUES (
         'b11ebc99-9c0b-4ef8-bb6d-6bb9bd380b22',
         'Lost_Operator_Alpha',
-        '03b41178cd224b893a71b25076eefc432d56a29851a7eef1109bcfa0329a1df27b',
+        $2,
         $1,
         30, -- Demo fast timeout window
         NOW() - INTERVAL '5 days', -- Last seen 5 days ago (Guarantees instant timeout status)
-        'ACTIVE' -- The background scheduler.go file will instantly flip this to DORMANT on its first loop
+        'ACTIVE', -- The background scheduler.go file will instantly flip this to DORMANT on its first loop
+        2,
+        ARRAY[$2, $3, $4],
+        'offline-regtest-preview',
+        'wsh(sortedmulti(2,' || $2 || ',' || $3 || ',' || $4 || '))',
+        'regtest'
       );
-    `, [dormantPayload]);
+    `, [dormantPayload, dormantBeneficiary, ownerPubkey, operatorPubkey]);
 
     console.log("==============================================================================");
     console.log("🎉 SUCCESS: Database seeding parameters completed flawlessly!");
