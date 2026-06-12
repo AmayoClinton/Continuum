@@ -1,0 +1,30 @@
+{
+  "name": "continuum-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Continuum: Autonomous Lightning Dead-Man Switch Asset Recovery Protocol",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "infra:up": "docker-compose -f infrastructure/docker/docker-compose.yml up -d",
+    "infra:down": "docker-compose -f infrastructure/docker/docker-compose.yml down",
+    "infra:init": "cd infrastructure/regtest-setup && ./init.sh",
+    "dev": "./scripts/start-dev.sh",
+    "warp": "./scripts/simulate-death.sh",
+    "gen-vault": "./scripts/generate-vault.sh"
+  },
+  "keywords": [
+    "bitcoin",
+    "lightning-network",
+    "dead-man-switch",
+    "monorepo",
+    "nextjs",
+    "golang"
+  ],
+  "author": "Continuum Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
