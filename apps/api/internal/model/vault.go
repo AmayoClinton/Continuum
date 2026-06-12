@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"time"
+
+	"github.com/lib/pq"
+)
 
 type VaultStatus string
 
@@ -10,11 +14,17 @@ const (
 )
 
 type Vault struct {
-	ID                     string      `db:"id" json:"id"`
-	Alias                  string      `db:"alias" json:"alias"`
-	BeneficiaryPubkey      string      `db:"beneficiary_pubkey" json:"beneficiary_pubkey"`
-	EncryptedPayload       string      `db:"encrypted_payload" json:"encrypted_payload"` 
-	CheckInIntervalSeconds int         `db:"check_in_interval_seconds" json:"check_in_interval_seconds"`
-	LastCheckInAt          time.Time   `db:"last_check_in_at" json:"last_check_in_at"`
-	Status                 VaultStatus `db:"status" json:"status"`
+	ID                     string         `db:"id" json:"id"`
+	Alias                  string         `db:"alias" json:"alias"`
+	BeneficiaryPubkey      string         `db:"beneficiary_pubkey" json:"beneficiary_pubkey"`
+	EncryptedPayload       string         `db:"encrypted_payload" json:"encrypted_payload"`
+	CheckInIntervalSeconds int            `db:"check_in_interval_seconds" json:"check_in_interval_seconds"`
+	LastCheckInAt          time.Time      `db:"last_check_in_at" json:"last_check_in_at"`
+	Status                 VaultStatus    `db:"status" json:"status"`
+	MultisigRequired       int            `db:"multisig_required" json:"multisig_required"`
+	MultisigPubkeys        pq.StringArray `db:"multisig_pubkeys" json:"multisig_pubkeys"`
+	MultisigAddress        string         `db:"multisig_address" json:"multisig_address"`
+	MultisigRedeemScript   string         `db:"multisig_redeem_script" json:"multisig_redeem_script"`
+	MultisigDescriptor     string         `db:"multisig_descriptor" json:"multisig_descriptor"`
+	MultisigNetwork        string         `db:"multisig_network" json:"multisig_network"`
 }
