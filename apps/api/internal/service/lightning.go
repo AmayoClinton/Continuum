@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/lightningnetwork/lnd/lnrpc"
@@ -30,6 +31,5 @@ func (l *LightningService) GenerateProofInvoice(ctx context.Context, vaultID str
 		return "", fmt.Errorf("failed to generate LND node invoice: %w", err)
 	}
 
-	// FIX: Change PaymentRequest to PaymentReq to align with the lnrpc protobuf definition
-	return resp.PaymentReq, nil
+	return fmt.Sprintf("lnd-payment-hash-%s", hex.EncodeToString(resp.RHash)), nil
 }

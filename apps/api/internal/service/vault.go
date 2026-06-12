@@ -25,29 +25,13 @@ func (s *VaultService) CreateNewVault(ctx context.Context, vault *model.Vault) e
 	if vault.CheckInIntervalSeconds <= 0 {
 		return errors.New("check-in interval window must be greater than zero")
 	}
+	if vault.MultisigRequired <= 0 || len(vault.MultisigPubkeys) == 0 || vault.MultisigDescriptor == "" {
+		return errors.New("missing multisig recovery policy")
+	}
 	return s.repo.InsertVault(ctx, vault)
 }
 
 // ProcessCheckIn bumps the last seen timestamp of a vault back to NOW(), proving ownership
 func (s *VaultService) ProcessCheckIn(ctx context.Context, vaultID string) error {
-	query := `
-		UPDATE vaults 
-		SET last_check_in_at = NOW(), 
-		    status = 'ACTIVE' 
-		WHERE id = $1;
-	`
-	result, err := s.repo.Db.ExecContext(ctx, query, vaultID)
-	if err != nil {
-		return err
-	}
-
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rows == 0 {
-		return errors.New("target continuum vault space not found")
-	}
-
-	return nil
+	return s.repo.TouchVault(ctx, vaultID)
 }

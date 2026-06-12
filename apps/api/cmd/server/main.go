@@ -18,6 +18,8 @@ import (
 )
 
 func main() {
+	_ = godotenv.Load()
+
 	// 1. Extract Environment variables or fallback to local Docker infrastructure defaults
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
@@ -33,7 +35,8 @@ func main() {
 	// 2. Initialize Layered Domain Entities & Business Services
 	vaultService := service.NewVaultService(db)
 	schedulerService := service.NewScheduler(db)
-	lightningService := service.NewLightningService(nil) 
+	lightningService := service.NewLightningService(nil)
+	multisigService := service.NewMultisigServiceFromEnv()
 
 	// 3. Launch Non-Blocking Background Scheduler Daemon
 	ctx, cancel := context.WithCancel(context.Background())
@@ -49,18 +52,26 @@ func main() {
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
 		AllowHeaders: []string{"Origin", "Content-Type", "Accept"},
-		AllowMethods: []string{"GET", "POST", "OPTIONS"},
+		AllowMethods: []string{"GET", "POST", "PATCH", "OPTIONS"},
 	}))
 
-	vaultHandler := handler.NewVaultHandler(db)
+	vaultHandler := handler.NewVaultHandler(db, vaultService, lightningService, multisigService)
 	proofHandler := handler.NewProofHandler(db)
 	recoveryHandler := handler.NewRecoveryHandler(db)
 
 	// 5. Structure API Routing Table Tree Layouts
 	api := app.Group("/api")
 	{
+		api.Get("/health", func(c fiber.Ctx) error {
+			return c.JSON(fiber.Map{"status": "ok", "service": "continuum-api"})
+		})
+		api.Get("/vaults", vaultHandler.ListVaults)
 		api.Post("/vaults", vaultHandler.CreateVault)
 		api.Get("/vaults/:id", recoveryHandler.GetVaultStatus)
+		api.Post("/vaults/:id/check-in", vaultHandler.CheckIn)
+		api.Post("/vaults/:id/invoice", vaultHandler.CreateProofInvoice)
+		api.Patch("/vaults/:id/timer", vaultHandler.UpdateTimer)
+		api.Post("/vaults/:id/beneficiaries", vaultHandler.AddBeneficiary)
 		api.Post("/vaults/:id/warp", proofHandler.SimulateTimeWarp)
 	}
 
