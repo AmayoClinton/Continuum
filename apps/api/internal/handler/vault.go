@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"continuum/api/internal/model"
 	"continuum/api/internal/repository"
 
@@ -18,7 +19,11 @@ func NewVaultHandler(repo *repository.Database) *VaultHandler {
 // CreateVault handles POST /api/vaults
 func (h *VaultHandler) CreateVault(c fiber.Ctx) error {
 	var req model.Vault
-	if err := c.Bind().Body(&req); err != nil {
+	body := c.Body()
+	if len(body) == 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "Empty request body"})
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid request payload format"})
 	}
 

@@ -30,6 +30,6 @@ func (l *LightningService) GenerateProofInvoice(ctx context.Context, vaultID str
 		return "", fmt.Errorf("failed to generate LND node invoice: %w", err)
 	}
 
-	// FIX: Change PaymentRequest to PaymentReq to align with the lnrpc protobuf definition
-	return resp.PaymentReq, nil
+	// Older lnd client version returns RHash only; return hex of RHash
+	return fmt.Sprintf("%x", resp.RHash), nil
 }
