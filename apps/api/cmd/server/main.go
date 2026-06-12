@@ -18,9 +18,10 @@ import (
 )
 
 func main() {
+	// 1. Load .env (best-effort) and extract environment variables
 	_ = godotenv.Load()
 
-	// 1. Extract Environment variables or fallback to local Docker infrastructure defaults
+	// Extract Environment variables or fallback to local Docker infrastructure defaults
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		dbURL = "postgres://postgres:postgres@localhost:5432/continuum?sslmode=disable"

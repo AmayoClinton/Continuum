@@ -1,24 +1,36 @@
 #!/bin/bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Resolve repository root (script lives in ./scripts)
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Source the central environment variables into this bash context shell
-if [ -f "$ROOT_DIR/.env" ]; then
+if [ -f "$REPO_ROOT/.env" ]; then
     set -a
     # shellcheck disable=SC1091
-    source "$ROOT_DIR/.env"
+    source "$REPO_ROOT/.env"
     set +a
 fi
 
+# Ensure a writable Go module cache is available (avoid permission issues)
+GOMODCACHE=${GOMODCACHE:-"$REPO_ROOT/.cache/go-mod"}
+mkdir -p "$GOMODCACHE"
+export GOMODCACHE
+
 echo "🚀 Launching Continuum Backend Microservice Instance..."
-cd "$ROOT_DIR/apps/api"
+cd "$REPO_ROOT/apps/api" || exit 1
 go run cmd/server/main.go &
 API_PID=$!
 
 echo "⚛️ Starting Web Interface Server Engine..."
-cd "$ROOT_DIR/apps/web"
-npm run dev &
+cd "$REPO_ROOT/apps/web" || exit 1
+if ! [ -d node_modules ]; then
+    echo "📦 Installing web dependencies..."
+    npm ci --no-audit --no-fund
+fi
+
+# start Next dev on port 3000 to avoid colliding with backend
+PORT=3000 npm run dev &
 WEB_PID=$!
 
 trap "kill $API_PID $WEB_PID; exit" INT TERM EXIT
