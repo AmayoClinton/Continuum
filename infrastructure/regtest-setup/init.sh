@@ -17,3 +17,5 @@ MINING_ADDR=$(btc-cli getnewaddress)
 btc-cli generatetoaddress 101 "$MINING_ADDR"
 
 echo "✅ Chain state synchronized. Current Block Count: $(btc-cli getblockcount)"
+echo "🏃‍♂️ Transitioning directly to wallet allocation routines..."
+./wallets.sh
