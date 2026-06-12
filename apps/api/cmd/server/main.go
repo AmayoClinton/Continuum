@@ -18,7 +18,10 @@ import (
 )
 
 func main() {
-	// 1. Extract Environment variables or fallback to local Docker infrastructure defaults
+	// 1. Load .env (best-effort) and extract environment variables
+	_ = godotenv.Load()
+
+	// Extract Environment variables or fallback to local Docker infrastructure defaults
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		dbURL = "postgres://postgres:postgres@localhost:5432/continuum?sslmode=disable"
@@ -34,6 +37,10 @@ func main() {
 	vaultService := service.NewVaultService(db)
 	schedulerService := service.NewScheduler(db)
 	lightningService := service.NewLightningService(nil) 
+
+	// Prevent "declared and not used" in this bootstrap; services are available for future wiring
+	_ = vaultService
+	_ = lightningService
 
 	// 3. Launch Non-Blocking Background Scheduler Daemon
 	ctx, cancel := context.WithCancel(context.Background())
