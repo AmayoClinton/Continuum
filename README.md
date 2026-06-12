@@ -47,6 +47,24 @@ Automated scheduler monitors inactivity and triggers inheritance flow.
 ### 👥 Multi-Beneficiary Support
 Multiple recipients can be assigned roles (primary / backup).
 
+### 🔑 Bitcoin Regtest Multisig Recovery
+Each vault now stores a Bitcoin recovery policy alongside the encrypted payload:
+
+- Default demo policy: **2-of-3 native SegWit multisig**
+- Signers: owner key, beneficiary key, operator/recovery key
+- Descriptor shape: `wsh(sortedmulti(m,pubkey1,pubkey2,...))`
+- Network: Bitcoin Core **regtest**
+
+When Bitcoin Core regtest RPC is reachable, the API calls `createmultisig` with
+`address_type="bech32"` and stores the returned funding address, redeem script,
+and descriptor. If regtest is not running, the app still creates a deterministic
+descriptor preview so the web demo remains usable.
+
+Important boundary: Continuum gates the **release of encrypted recovery
+instructions** based on proof-of-life. It does not automatically spend the
+multisig yet. The next protocol step is PSBT creation/signing from the dormant
+vault policy.
+
 ---
 
 ## 🏗 System Architecture
