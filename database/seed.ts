@@ -33,7 +33,7 @@ async function seedDatabase() {
 
     // Record A: Active Shielded State Scenario
     await client.query(`
-      INSERT INTO vaults (id, alias, beneficiary_pubkey, encrypted_payload, check_in_interval_seconds, last_check_in_at, status)
+      INSERT INTO vaults (id, alias, beneficiary_pubkey, encrypted_payload, check_in_interval_seconds, last_check_in_at, status, created_at, updated_at)
       VALUES (
         'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
         'Satoshi_Legacy_Vault',
@@ -41,13 +41,15 @@ async function seedDatabase() {
         $1,
         86400, -- 24 Hour check-in safety window
         NOW(), -- Checked in just now
-        'ACTIVE'
+        'ACTIVE',
+        NOW(),
+        NOW()
       );
     `, [activePayload]);
 
     // Record B: Expired Dormant Stage Scenario (Ready for Bob to extract on stage)
     await client.query(`
-      INSERT INTO vaults (id, alias, beneficiary_pubkey, encrypted_payload, check_in_interval_seconds, last_check_in_at, status)
+      INSERT INTO vaults (id, alias, beneficiary_pubkey, encrypted_payload, check_in_interval_seconds, last_check_in_at, status, created_at, updated_at)
       VALUES (
         'b11ebc99-9c0b-4ef8-bb6d-6bb9bd380b22',
         'Lost_Operator_Alpha',
@@ -55,7 +57,9 @@ async function seedDatabase() {
         $1,
         30, -- Demo fast timeout window
         NOW() - INTERVAL '5 days', -- Last seen 5 days ago (Guarantees instant timeout status)
-        'ACTIVE' -- The background scheduler.go file will instantly flip this to DORMANT on its first loop
+        'ACTIVE', -- The background scheduler.go file will instantly flip this to DORMANT on its first loop
+        NOW() - INTERVAL '5 days',
+        NOW() - INTERVAL '5 days'
       );
     `, [dormantPayload]);
 
