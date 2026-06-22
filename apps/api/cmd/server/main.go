@@ -18,7 +18,12 @@ import (
 )
 
 func main() {
-	// 1. Extract Environment variables or fallback to local Docker infrastructure defaults
+	// 1. Load the environment configuration BEFORE evaluating variables
+	// Looks for the file at the project root folder
+	if err := godotenv.Load("../../.env"); err != nil {
+		log.Println("ℹ️ No root .env file found, relying purely on host environment parameters.")
+	}
+
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		dbURL = "postgres://postgres:postgres@localhost:5432/continuum?sslmode=disable"
@@ -30,15 +35,28 @@ func main() {
 		log.Fatalf("❌ Core Database connection crash: %v", err)
 	}
 
-	// 2. Initialize Layered Domain Entities & Business Services
+	// 2. Initialize Layered Domain Entities & Real Business Services
+	lndConfig := &service.LNDConfig{
+		Host:         os.Getenv("LND_HOST"),
+		MacaroonPath: os.Getenv("LND_MACAROON_PATH"),
+		TLSCertPath:  os.Getenv("LND_TLS_CERT_PATH"),
+	}
+	
+	lightningService, err := service.NewLightningService(lndConfig)
+	if err != nil {
+		log.Printf("⚠️ LND connection failed: %v. Node falling back onto local simulation parameters.", err)
+	}
+
+	// Inject the database and dependencies securely across services
 	vaultService := service.NewVaultService(db)
 	schedulerService := service.NewScheduler(db)
-	lightningService := service.NewLightningService(nil) 
 
 	// 3. Launch Non-Blocking Background Scheduler Daemon
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	schedulerService.StartCheckLoop(ctx, 5*time.Second)
+	
+	// Evaluate the expiration matrix every 10 seconds for clean production polling efficiency
+	schedulerService.StartCheckLoop(ctx, 10*time.Second)
 	log.Println("⏰ Autonomous dead-man switch tracking ticker online.")
 
 	// 4. Provision HTTP Transport Adapters (Fiber Framework Instance)
@@ -46,14 +64,16 @@ func main() {
 		AppName: "Continuum Anonymized Inheritance Core v1.0",
 	})
 
+	// Tighten CORS origins in your head variables when deploying to production domains
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"*"},
-		AllowHeaders: []string{"Origin", "Content-Type", "Accept"},
+		AllowOrigins: []string{"*"}, 
+		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		AllowMethods: []string{"GET", "POST", "OPTIONS"},
 	}))
 
-	vaultHandler := handler.NewVaultHandler(db)
-	proofHandler := handler.NewProofHandler(db)
+	// Inject services and repositories properly into our HTTP transport adapters
+	vaultHandler := handler.NewVaultHandler(db, vaultService, lightningService)
+	proofHandler := handler.NewProofHandler(db, lightningService)
 	recoveryHandler := handler.NewRecoveryHandler(db)
 
 	// 5. Structure API Routing Table Tree Layouts
@@ -61,13 +81,25 @@ func main() {
 	{
 		api.Post("/vaults", vaultHandler.CreateVault)
 		api.Get("/vaults/:id", recoveryHandler.GetVaultStatus)
-		api.Post("/vaults/:id/warp", proofHandler.SimulateTimeWarp)
+		
+		// Production Security Guard: Protect the time-warp testing backdoor
+		if os.Getenv("ALLOW_DEV_TIME_WARP") == "true" {
+			log.Println("⚠️ WARNING: Time Warp simulation backdoor route activated.")
+			api.Post("/vaults/:id/warp", proofHandler.SimulateTimeWarp)
+		} else {
+			log.Println("🔒 Production lockdown active: Time warp endpoints are explicitly disabled.")
+		}
 	}
 
 	// 6. Establish Graceful Shutdown Routines
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
 	go func() {
-		log.Println("🚀 Continuum Protocol Core HTTP node listening on port :8080")
-		if err := app.Listen(":8080"); err != nil {
+		log.Printf("🚀 Continuum Protocol Core HTTP node listening on port :%s\n", port)
+		if err := app.Listen(":" + port); err != nil {
 			log.Printf("⚠️ Server shut down warning: %v", err)
 		}
 	}()
