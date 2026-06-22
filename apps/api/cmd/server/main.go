@@ -19,7 +19,6 @@ import (
 
 func main() {
 	// 1. Load the environment configuration BEFORE evaluating variables
-	// Looks for the file at the project root folder
 	if err := godotenv.Load("../../.env"); err != nil {
 		log.Println("ℹ️ No root .env file found, relying purely on host environment parameters.")
 	}
@@ -44,11 +43,11 @@ func main() {
 	
 	lightningService, err := service.NewLightningService(lndConfig)
 	if err != nil {
-		log.Printf("⚠️ LND connection failed: %v. Node falling back onto local simulation parameters.", err)
+		log.Printf("⚠️ LND connection initialization failed: %v. Node falling back onto simulation mode.", err)
 	}
 
-	// Inject the database and dependencies securely across services
-	vaultService := service.NewVaultService(db)
+	// Connect the dependencies safely across services
+	vaultService := service.NewVaultService(db, lightningService)
 	schedulerService := service.NewScheduler(db)
 
 	// 3. Launch Non-Blocking Background Scheduler Daemon
@@ -64,15 +63,14 @@ func main() {
 		AppName: "Continuum Anonymized Inheritance Core v1.0",
 	})
 
-	// Tighten CORS origins in your head variables when deploying to production domains
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"}, 
 		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		AllowMethods: []string{"GET", "POST", "OPTIONS"},
 	}))
 
-	// Inject services and repositories properly into our HTTP transport adapters
-	vaultHandler := handler.NewVaultHandler(db, vaultService, lightningService)
+	// Inject the proper architectural layers into handlers
+	vaultHandler := handler.NewVaultHandler(db, vaultService)
 	proofHandler := handler.NewProofHandler(db, lightningService)
 	recoveryHandler := handler.NewRecoveryHandler(db)
 
@@ -82,7 +80,11 @@ func main() {
 		api.Post("/vaults", vaultHandler.CreateVault)
 		api.Get("/vaults/:id", recoveryHandler.GetVaultStatus)
 		
-		// Production Security Guard: Protect the time-warp testing backdoor
+		// ⚡ Lightning Network Interactivity Core Flow Endpoints
+		api.Post("/vaults/:id/invoice", vaultHandler.RequestCheckInToken)
+		api.Post("/vaults/:id/checkin", vaultHandler.ConfirmCheckIn)
+		
+		// 🔒 Production Security Guard: Protect the time-warp testing backdoor
 		if os.Getenv("ALLOW_DEV_TIME_WARP") == "true" {
 			log.Println("⚠️ WARNING: Time Warp simulation backdoor route activated.")
 			api.Post("/vaults/:id/warp", proofHandler.SimulateTimeWarp)
@@ -110,7 +112,7 @@ func main() {
 	<-quit
 
 	log.Println("🛑 Shutting down Continuum Node gracefully...")
-	cancel()
+	cancel() // Shuts down background tracking checks immediately
 	if err := app.Shutdown(); err != nil {
 		log.Fatalf("Forced cluster closure error: %v", err)
 	}

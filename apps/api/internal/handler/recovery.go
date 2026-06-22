@@ -23,7 +23,7 @@ func (h *RecoveryHandler) GetVaultStatus(c fiber.Ctx) error {
 	}
 
 	// FIXED: Swapped c.Context() out for c.UserContext() to perfectly match Fiber v3 standard specs
-	vault, err := h.Repo.GetVaultByID(c.UserContext(), id)
+	vault, err := h.Repo.GetVaultByID(c.Context(), id)
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "Target vault space not found"})
 	}
