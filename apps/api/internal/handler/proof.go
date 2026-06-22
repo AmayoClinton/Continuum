@@ -2,15 +2,21 @@ package handler
 
 import (
 	"continuum/api/internal/repository"
+	"continuum/api/internal/service"
 	"github.com/gofiber/fiber/v3"
 )
 
 type ProofHandler struct {
-	Repo *repository.Database
+	Repo             *repository.Database
+	LightningService *service.LightningService 
 }
 
-func NewProofHandler(repo *repository.Database) *ProofHandler {
-	return &ProofHandler{Repo: repo}
+// NewProofHandler now accepts both the relational storage pool and the lightning engine
+func NewProofHandler(repo *repository.Database, lnService *service.LightningService) *ProofHandler {
+	return &ProofHandler{
+		Repo:             repo,
+		LightningService: lnService,
+	}
 }
 
 // SimulateTimeWarp handles POST /api/vaults/:id/warp

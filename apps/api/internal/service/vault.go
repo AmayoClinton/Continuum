@@ -1,4 +1,3 @@
-// apps/api/internal/service/vault.go
 package service
 
 import (
@@ -19,9 +18,7 @@ func NewVaultService(repo *repository.Database) *VaultService {
 
 // CreateNewVault orchestrates the database insertion for Alice's encrypted capsule
 func (s *VaultService) CreateNewVault(ctx context.Context, vault *model.Vault) error {
-	if vault.Alias == "" || vault.BeneficiaryPubkey == "" || vault.EncryptedPayload == "" {
-		return errors.New("missing critical cryptographic parameters")
-	}
+	// Basic business layer validation fallback guard
 	if vault.CheckInIntervalSeconds <= 0 {
 		return errors.New("check-in interval window must be greater than zero")
 	}
@@ -30,10 +27,12 @@ func (s *VaultService) CreateNewVault(ctx context.Context, vault *model.Vault) e
 
 // ProcessCheckIn bumps the last seen timestamp of a vault back to NOW(), proving ownership
 func (s *VaultService) ProcessCheckIn(ctx context.Context, vaultID string) error {
+	// FIXED: Updated both last_check_in_at and the standard updated_at audit metric
 	query := `
 		UPDATE vaults 
 		SET last_check_in_at = NOW(), 
-		    status = 'ACTIVE' 
+		    status = 'ACTIVE',
+		    updated_at = NOW()
 		WHERE id = $1;
 	`
 	result, err := s.repo.Db.ExecContext(ctx, query, vaultID)
