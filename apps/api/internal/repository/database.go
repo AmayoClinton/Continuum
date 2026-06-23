@@ -22,7 +22,8 @@ func NewDatabase(dataSourceName string) (*Database, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	
+	// Hardened pooling configurations optimized for cloud resource targets
 	db.SetMaxOpenConns(20)
 	db.SetMaxIdleConns(20)
 	db.SetConnMaxLifetime(5 * time.Minute)
@@ -34,66 +35,47 @@ func NewDatabase(dataSourceName string) (*Database, error) {
 func (d *Database) InsertVault(ctx context.Context, v *model.Vault) error {
 	query := `
 		INSERT INTO vaults (
-			alias,
-			beneficiary_pubkey,
-			encrypted_payload,
-			check_in_interval_seconds,
-			last_check_in_at,
-			status,
-			multisig_required,
-			multisig_pubkeys,
-			multisig_address,
-			multisig_redeem_script,
-			multisig_descriptor,
-			multisig_network
-		)
-		VALUES (
-			:alias,
-			:beneficiary_pubkey,
-			:encrypted_payload,
-			:check_in_interval_seconds,
-			NOW(),
-			'ACTIVE',
-			:multisig_required,
-			:multisig_pubkeys,
-			:multisig_address,
-			:multisig_redeem_script,
-			:multisig_descriptor,
-			:multisig_network
-		)
-		RETURNING id, last_check_in_at, status;
+			alias, 
+			beneficiary_pubkey, 
+			encrypted_payload, 
+			check_in_interval_seconds, 
+			last_check_in_at, 
+			status
+		) VALUES ($1, $2, $3, $4, NOW(), 'ACTIVE')
+		RETURNING id, last_check_in_at, status, created_at, updated_at;
 	`
-	stmt, err := d.Db.PrepareNamedContext(ctx, query)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	return stmt.GetContext(ctx, v, v)
+	
+	// Explicitly query and map the database-generated metadata metrics 
+	// directly onto our runtime model reference pointer fields.
+	err := d.Db.GetContext(ctx, v, query, 
+		v.Alias, 
+		v.BeneficiaryPubkey, 
+		v.EncryptedPayload, 
+		v.CheckInIntervalSeconds,
+	)
+	
+	return err
 }
 
 // GetVaultByID finds a specific entry space to let beneficiaries pull or evaluate access locks
 func (d *Database) GetVaultByID(ctx context.Context, id string) (*model.Vault, error) {
 	var vault model.Vault
+	
 	query := `
-		SELECT
-			id,
-			alias,
-			beneficiary_pubkey,
-			encrypted_payload,
-			check_in_interval_seconds,
-			last_check_in_at,
-			status,
-			multisig_required,
-			multisig_pubkeys,
-			multisig_address,
-			multisig_redeem_script,
-			multisig_descriptor,
-			multisig_network
-		FROM vaults
+		SELECT 
+			id, 
+			alias, 
+			beneficiary_pubkey, 
+			encrypted_payload, 
+			check_in_interval_seconds, 
+			last_check_in_at, 
+			status, 
+			created_at, 
+			updated_at 
+		FROM vaults 
 		WHERE id = $1
 	`
-
+	
 	err := d.Db.GetContext(ctx, &vault, query, id)
 	if err != nil {
 		return nil, err

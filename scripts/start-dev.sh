@@ -4,36 +4,49 @@ set -euo pipefail
 # Resolve repository root (script lives in ./scripts)
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Source the central environment variables into this bash context shell
-if [ -f "$REPO_ROOT/.env" ]; then
-    set -a
-    # shellcheck disable=SC1091
-    source "$REPO_ROOT/.env"
-    set +a
+# Establish the structural codebase absolute root directory anchor
+ROOT_DIR="/workspaces/Continuum"
+
+echo "⛓️  Checking underlying infrastructure health status..."
+
+# 1. Ensure Docker microservices are up and running before starting apps
+if command -v docker &> /dev/null; then
+    if ! docker ps | grep -q "continuum-bitcoind"; then
+        echo "🐳 Infrastructure stack down. Spinning up environment cluster..."
+        docker compose -f "$ROOT_DIR/infrastructure/docker/docker-compose.yml" up -d
+        sleep 2
+    fi
+else
+    echo "❌ Error: Docker daemon dependency missing. Please start Docker first."
+    exit 1
 fi
 
-# Ensure a writable Go module cache is available (avoid permission issues)
-GOMODCACHE=${GOMODCACHE:-"$REPO_ROOT/.cache/go-mod"}
-mkdir -p "$GOMODCACHE"
-export GOMODCACHE
+# 2. Source the central environment variables safely into this execution runtime shell
+if [ -f "$ROOT_DIR/.env" ]; then
+    echo "📝 Exporting central configuration environment flags..."
+    export $(grep -v '^#' "$ROOT_DIR/.env" | xargs)
+fi
 
-echo "🚀 Launching Continuum Backend Microservice Instance..."
-cd "$REPO_ROOT/apps/api" || exit 1
-go run cmd/server/main.go &
+echo "🚀 Launching Continuum Backend Microservice Instance (Go/Fiber)..."
+cd "$ROOT_DIR/apps/api"
+# Running with air (if installed) or standard go run
+if command -v air &> /dev/null; then
+    air &
+else
+    go run cmd/server/main.go &
+fi
 API_PID=$!
 
-echo "⚛️ Starting Web Interface Server Engine..."
-cd "$REPO_ROOT/apps/web" || exit 1
-if ! [ -d node_modules ]; then
-    echo "📦 Installing web dependencies..."
-    npm ci --no-audit --no-fund
-fi
-
-# start Next dev on port 3000 to avoid colliding with backend
-PORT=3000 npm run dev &
+echo "⚛️  Starting Web Interface Server Engine (Next.js/Vite)..."
+cd "$ROOT_DIR/apps/web"
+npm run dev &
 WEB_PID=$!
 
-trap "kill $API_PID $WEB_PID; exit" INT TERM EXIT
+# Ensure graceful containment breakdown on termination signals
+trap "echo -e '\n🛑 Shutting down microservices gracefully...'; kill $API_PID $WEB_PID 2>/dev/null; exit" INT TERM EXIT
 
-echo "🎉 Dev environment running. Press Ctrl+C to terminate all services safely."
+echo "=============================================================================="
+echo "🎉 Development environment running. Press Ctrl+C to terminate all services safely."
+echo "=============================================================================="
+
 wait

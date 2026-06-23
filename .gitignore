@@ -1,3 +1,37 @@
-node_modules
-.next
-tsconfig.tsbuildinfo
+# ==============================================================================
+# 📦 Node / Frontend Dependencies (apps/web)
+# ==============================================================================
+node_modules/
+.npm
+*.log
+.next/
+dist/
+
+# ==============================================================================
+# 🐹 Go / Backend Artifacts (apps/api)
+# ==============================================================================
+# Compiled binaries
+bin/
+main
+server
+
+# Architecture-specific development overrides
+.env
+.env.local
+.env.*.local
+
+# ==============================================================================
+# ⚡ Infrastructure Secrets & Volatile Data (infrastructure/)
+# ==============================================================================
+# Protect private cryptographic credentials and macaroons
+infrastructure/docker/lnd_data/password.txt
+infrastructure/docker/lnd_data/**/*.macaroon
+infrastructure/docker/lnd_data/**/*.cert
+infrastructure/docker/lnd_data/**/*.key
+
+# Ignore local blockchain storage blocks and index states
+infrastructure/docker/lnd_data/data/
+infrastructure/docker/bitcoin_data/
+
+# Ignore persistent PostgreSQL raw volume tracking states if mapped locally
+infrastructure/docker/pg_data/

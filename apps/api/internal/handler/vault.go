@@ -1,7 +1,8 @@
 package handler
 
 import (
-	"encoding/json"
+	"time"
+
 	"continuum/api/internal/model"
 	"continuum/api/internal/repository"
 	"continuum/api/internal/service"
@@ -11,34 +12,15 @@ import (
 )
 
 type VaultHandler struct {
-	Repo      *repository.Database
-	Service   *service.VaultService
-	Lightning *service.LightningService
-	Multisig  *service.MultisigService
+	Repo         *repository.Database
+	VaultService *service.VaultService
 }
 
-type updateTimerRequest struct {
-	CheckInIntervalSeconds int `json:"check_in_interval_seconds"`
-}
-
-type addBeneficiaryRequest struct {
-	Pubkey string `json:"pubkey"`
-}
-
-func NewVaultHandler(repo *repository.Database, vaultService *service.VaultService, lightningService *service.LightningService, multisigService *service.MultisigService) *VaultHandler {
-	return &VaultHandler{Repo: repo, Service: vaultService, Lightning: lightningService, Multisig: multisigService}
-}
-
-func (h *VaultHandler) ListVaults(c fiber.Ctx) error {
-	vaults, err := h.Repo.ListVaults(c.Context())
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+func NewVaultHandler(repo *repository.Database, vaultSvc *service.VaultService) *VaultHandler {
+	return &VaultHandler{
+		Repo:         repo,
+		VaultService: vaultSvc,
 	}
-
-	return c.JSON(fiber.Map{
-		"status": "SUCCESS",
-		"vaults": vaults,
-	})
 }
 
 // CreateVault handles POST /api/vaults
@@ -74,62 +56,69 @@ func (h *VaultHandler) CreateVault(c fiber.Ctx) error {
 	req.MultisigDescriptor = policy.Descriptor
 	req.MultisigNetwork = policy.Network
 
-	if err := h.Service.CreateNewVault(c.Context(), &req); err != nil {
+	if req.CheckInIntervalSeconds <= 0 {
+		req.CheckInIntervalSeconds = 2592000 // Default to 30 days
+	}
+
+	req.Status = "ACTIVE"
+	req.LastCheckInAt = time.Now()
+
+	// ✅ FIXED FOR FIBER v3: Use c.Context()
+	if err := h.VaultService.CreateNewVault(c.Context(), &req); err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	return c.Status(201).JSON(fiber.Map{
 		"status":   "SUCCESS",
 		"vault_id": req.ID,
-		"message":  "Continuum cryptographic vault deployed.",
-		"multisig": fiber.Map{
-			"required":      req.MultisigRequired,
-			"pubkeys":       req.MultisigPubkeys,
-			"address":       req.MultisigAddress,
-			"redeem_script": req.MultisigRedeemScript,
-			"descriptor":    req.MultisigDescriptor,
-			"network":       req.MultisigNetwork,
-		},
+		"message":  "Continuum cryptographic vault deployed and activated safely.",
 	})
 }
 
-func (h *VaultHandler) CheckIn(c fiber.Ctx) error {
-	id := c.Params("id")
-	if id == "" {
+// RequestCheckInToken handles POST /api/vaults/:id/invoice
+func (h *VaultHandler) RequestCheckInToken(c fiber.Ctx) error {
+	vaultID := c.Params("id")
+	if vaultID == "" {
 		return c.Status(400).JSON(fiber.Map{"error": "Missing target vault ID"})
 	}
 
-	if err := h.Service.ProcessCheckIn(c.Context(), id); err != nil {
-		return c.Status(404).JSON(fiber.Map{"error": err.Error()})
+	// ✅ FIXED FOR FIBER v3: Use c.Context()
+	invoice, err := h.VaultService.RequestCheckInInvoice(c.Context(), vaultID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{
+		"status":          "PENDING_PAYMENT",
+		"payment_request": invoice,
+		"value_sats":      1,
+		"message":         "Settle this 1-sat invoice via your Lightning wallet to prove life status.",
+	})
+}
+
+// ConfirmCheckIn handles POST /api/vaults/:id/checkin
+func (h *VaultHandler) ConfirmCheckIn(c fiber.Ctx) error {
+	vaultID := c.Params("id")
+	if vaultID == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "Missing target vault ID"})
+	}
+
+	var payload struct {
+		Preimage string `json:"preimage"`
+	}
+	if err := c.Bind().Body(&payload); err != nil || payload.Preimage == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "Missing valid payment proof preimage string"})
+	}
+
+	// ✅ FIXED FOR FIBER v3: Use c.Context()
+	err := h.VaultService.VerifyAndProcessCheckIn(c.Context(), vaultID, payload.Preimage)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	return c.JSON(fiber.Map{
 		"status":  "SUCCESS",
-		"message": "Proof-of-life heartbeat accepted. Vault is ACTIVE.",
-	})
-}
-
-func (h *VaultHandler) UpdateTimer(c fiber.Ctx) error {
-	id := c.Params("id")
-	if id == "" {
-		return c.Status(400).JSON(fiber.Map{"error": "Missing target vault ID"})
-	}
-
-	var req updateTimerRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "Invalid timer payload"})
-	}
-	if req.CheckInIntervalSeconds < 30 {
-		return c.Status(400).JSON(fiber.Map{"error": "Timer must be at least 30 seconds"})
-	}
-
-	if err := h.Repo.UpdateVaultInterval(c.Context(), id, req.CheckInIntervalSeconds); err != nil {
-		return c.Status(404).JSON(fiber.Map{"error": err.Error()})
-	}
-
-	return c.JSON(fiber.Map{
-		"status":  "SUCCESS",
-		"message": "Inactivity timer updated.",
+		"message": "Proof of life accepted. Vault dead-man switch timer has been reset to NOW().",
 	})
 }
 
