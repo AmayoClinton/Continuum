@@ -1,86 +1,68 @@
-import { ec as EC } from 'elliptic';
-import crypto from 'crypto';
-
-const ec = new EC('secp256k1');
-
 interface EncryptedPackage {
-  ephemeralPubKey: string;
+  version: 1;
+  keyHint: string;
   iv: string;
-  authTag: string;
   ciphertext: string;
 }
 
-/**
- * Encrypts a plaintext string (Alice's seed) using Bob's Secp256k1 Public Key.
- * This utilizes a custom ECIES structure optimized for 48-hour hackathon execution velocity.
- */
-export function encryptPayload(plaintext: string, beneficiaryPubKeyHex: string): string {
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
+function base64ToBytes(value: string): Uint8Array {
+  const binary = atob(value);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+function asArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+async function deriveAesKey(keyMaterial: string): Promise<CryptoKey> {
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(keyMaterial.trim()));
+  return crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+
+export async function encryptPayload(plaintext: string, beneficiaryKeyMaterial: string): Promise<string> {
   try {
-    // 1. Generate an ephemeral, single-use public/private keypair
-    const ephemeralKey = ec.genKeyPair();
-    
-    // 2. Parse Bob's public key from hex format
-    const targetPubKey = ec.keyFromPublic(beneficiaryPubKeyHex, 'hex');
-    
-    // 3. Perform a Diffie-Hellman Key Exchange (ECDH) to derive a shared secret key
-    const sharedSecretPoint = ephemeralKey.derive(targetPubKey.getPublic());
-    const sharedSecretBuffer = Buffer.from(sharedSecretPoint.toString(16, 64), 'hex');
-    
-    // Hash the shared secret with SHA-256 to ensure a uniform 256-bit encryption key
-    const aesKey = crypto.createHash('sha256').update(sharedSecretBuffer).digest();
-    
-    // 4. Encrypt the plaintext payload using enterprise-standard AES-256-GCM
-    const iv = crypto.randomBytes(12); // Initialization vector
-    const cipher = crypto.createCipheriv('aes-256-gcm', aesKey, iv);
-    
-    let ciphertext = cipher.update(plaintext, 'utf8', 'hex');
-    ciphertext += cipher.final('hex');
-    
-    const authTag = cipher.getAuthTag().toString('hex');
-    
-    // 5. Package the resulting components together
-    const finalPackage: EncryptedPackage = {
-      ephemeralPubKey: ephemeralKey.getPublic('hex'),
-      iv: iv.toString('hex'),
-      authTag,
-      ciphertext: ciphertext
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const aesKey = await deriveAesKey(beneficiaryKeyMaterial);
+    const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, encoder.encode(plaintext));
+
+    const keyHash = await crypto.subtle.digest("SHA-256", encoder.encode(beneficiaryKeyMaterial));
+    const keyHint = bytesToBase64(new Uint8Array(keyHash).slice(0, 6));
+    const payload: EncryptedPackage = {
+      version: 1,
+      keyHint,
+      iv: bytesToBase64(iv),
+      ciphertext: bytesToBase64(new Uint8Array(encrypted))
     };
-    
-    // Convert the payload object to a standard string for database transit
-    return btoa(JSON.stringify(finalPackage));
+
+    return btoa(JSON.stringify(payload));
   } catch (error) {
     throw new Error(`Browser encryption failed: ${(error as Error).message}`);
   }
 }
 
-/**
- * Decrypts a ciphertext string package using Bob's private key.
- * Bob uses this utility locally inside his browser when pulling a dormant vault.
- */
-export function decryptPayload(base64Package: string, beneficiaryPrivateKeyHex: string): string {
+export async function decryptPayload(base64Package: string, beneficiaryKeyMaterial: string): Promise<string> {
   try {
-    // Decode the Base64 transit string back into individual crypto parameters
-    const decodedPackage: EncryptedPackage = JSON.parse(atob(base64Package));
-    
-    const beneficiaryKey = ec.keyFromPrivate(beneficiaryPrivateKeyHex, 'hex');
-    const ephemeralPubKey = ec.keyFromPublic(decodedPackage.ephemeralPubKey, 'hex');
-    
-    // Re-derive the exact same shared secret point using Bob's private key
-    const sharedSecretPoint = beneficiaryKey.derive(ephemeralPubKey.getPublic());
-    const sharedSecretBuffer = Buffer.from(sharedSecretPoint.toString(16, 64), 'hex');
-    const aesKey = crypto.createHash('sha256').update(sharedSecretBuffer).digest();
-    
-    const iv = Buffer.from(decodedPackage.iv, 'hex');
-    const authTag = Buffer.from(decodedPackage.authTag, 'hex');
-    
-    const decipher = crypto.createDecipheriv('aes-256-gcm', aesKey, iv);
-    decipher.setAuthTag(authTag);
-    
-    let decrypted = decipher.update(decodedPackage.ciphertext, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    
-    return decrypted;
-  } catch (error) {
-    throw new Error(`Local decryption failed: Authentication tag mismatch or invalid private key.`);
+    const payload = JSON.parse(atob(base64Package)) as EncryptedPackage;
+    const aesKey = await deriveAesKey(beneficiaryKeyMaterial);
+    const plaintext = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: asArrayBuffer(base64ToBytes(payload.iv)) },
+      aesKey,
+      asArrayBuffer(base64ToBytes(payload.ciphertext))
+    );
+
+    return decoder.decode(plaintext);
+  } catch {
+    throw new Error("Local decryption failed: invalid encrypted package or beneficiary key material.");
   }
 }

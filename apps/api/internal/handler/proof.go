@@ -32,9 +32,16 @@ func (h *ProofHandler) SimulateTimeWarp(c fiber.Ctx) error {
 		SET last_check_in_at = NOW() - INTERVAL '100 days' 
 		WHERE id = $1;
 	`
-	_, err := h.Repo.Db.ExecContext(c.Context(), query, vaultID)
+	result, err := h.Repo.Db.ExecContext(c.Context(), query, vaultID)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	if rowsAffected == 0 {
+		return c.Status(404).JSON(fiber.Map{"error": "Target vault space not found"})
 	}
 
 	return c.JSON(fiber.Map{

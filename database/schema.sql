@@ -1,6 +1,7 @@
 DROP TABLE IF EXISTS vaults;
 DROP TYPE IF EXISTS vault_status;
 
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TYPE vault_status AS ENUM ('ACTIVE', 'DORMANT');
 
 CREATE TABLE vaults (

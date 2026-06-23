@@ -30,6 +30,10 @@ async function seedDatabase() {
     })).toString('base64');
 
     console.log("📥 Injecting hackathon user demo records...");
+    const ownerPubkey = '02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const operatorPubkey = '03bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    const activeBeneficiary = '02e9a2631247d5124b893a71b25076eefc432d56a29851a7eef1109bcfa0329a1d';
+    const dormantBeneficiary = '03b41178cd224b893a71b25076eefc432d56a29851a7eef1109bcfa0329a1df27b';
 
     // Record A: Active Shielded State Scenario
     await client.query(`
@@ -37,7 +41,7 @@ async function seedDatabase() {
       VALUES (
         'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
         'Satoshi_Legacy_Vault',
-        '02e9a2631247d5124b893a71b25076eefc432d56a29851a7eef1109bcfa0329a1d',
+        $2,
         $1,
         86400, -- 24 Hour check-in safety window
         NOW(), -- Checked in just now
@@ -45,7 +49,7 @@ async function seedDatabase() {
         NOW(),
         NOW()
       );
-    `, [activePayload]);
+    `, [activePayload, activeBeneficiary, ownerPubkey, operatorPubkey]);
 
     // Record B: Expired Dormant Stage Scenario (Ready for Bob to extract on stage)
     await client.query(`
@@ -53,7 +57,7 @@ async function seedDatabase() {
       VALUES (
         'b11ebc99-9c0b-4ef8-bb6d-6bb9bd380b22',
         'Lost_Operator_Alpha',
-        '03b41178cd224b893a71b25076eefc432d56a29851a7eef1109bcfa0329a1df27b',
+        $2,
         $1,
         30, -- Demo fast timeout window
         NOW() - INTERVAL '5 days', -- Last seen 5 days ago (Guarantees instant timeout status)
@@ -61,7 +65,7 @@ async function seedDatabase() {
         NOW() - INTERVAL '5 days',
         NOW() - INTERVAL '5 days'
       );
-    `, [dormantPayload]);
+    `, [dormantPayload, dormantBeneficiary, ownerPubkey, operatorPubkey]);
 
     console.log("==============================================================================");
     console.log("🎉 SUCCESS: Database seeding parameters completed flawlessly!");

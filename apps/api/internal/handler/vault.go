@@ -8,6 +8,7 @@ import (
 	"continuum/api/internal/service"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/lib/pq"
 )
 
 type VaultHandler struct {
@@ -25,13 +26,35 @@ func NewVaultHandler(repo *repository.Database, vaultSvc *service.VaultService) 
 // CreateVault handles POST /api/vaults
 func (h *VaultHandler) CreateVault(c fiber.Ctx) error {
 	var req model.Vault
-	if err := c.Bind().Body(&req); err != nil {
+	body := c.Body()
+	if len(body) == 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "Empty request body"})
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid request payload format"})
 	}
 
 	if req.Alias == "" || req.BeneficiaryPubkey == "" || req.EncryptedPayload == "" {
 		return c.Status(400).JSON(fiber.Map{"error": "Missing critical cryptographic fields"})
 	}
+	if req.CheckInIntervalSeconds <= 0 {
+		req.CheckInIntervalSeconds = 60
+	}
+
+	pubkeys := []string(req.MultisigPubkeys)
+	if len(pubkeys) == 0 {
+		pubkeys = defaultDemoPubkeys(req.BeneficiaryPubkey)
+	}
+	policy, err := h.Multisig.BuildPolicy(c.Context(), req.MultisigRequired, pubkeys)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+	}
+	req.MultisigRequired = policy.Required
+	req.MultisigPubkeys = pq.StringArray(policy.Pubkeys)
+	req.MultisigAddress = policy.Address
+	req.MultisigRedeemScript = policy.RedeemScript
+	req.MultisigDescriptor = policy.Descriptor
+	req.MultisigNetwork = policy.Network
 
 	if req.CheckInIntervalSeconds <= 0 {
 		req.CheckInIntervalSeconds = 2592000 // Default to 30 days
@@ -97,4 +120,77 @@ func (h *VaultHandler) ConfirmCheckIn(c fiber.Ctx) error {
 		"status":  "SUCCESS",
 		"message": "Proof of life accepted. Vault dead-man switch timer has been reset to NOW().",
 	})
+}
+
+func (h *VaultHandler) AddBeneficiary(c fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "Missing target vault ID"})
+	}
+
+	var req addBeneficiaryRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid beneficiary payload"})
+	}
+
+	vault, err := h.Repo.GetVaultByID(c.Context(), id)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "Target vault space not found"})
+	}
+
+	pubkeys := append([]string{}, vault.MultisigPubkeys...)
+	pubkeys = append(pubkeys, req.Pubkey)
+	policy, err := h.Multisig.BuildPolicy(c.Context(), vault.MultisigRequired, pubkeys)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	vault.MultisigRequired = policy.Required
+	vault.MultisigPubkeys = pq.StringArray(policy.Pubkeys)
+	vault.MultisigAddress = policy.Address
+	vault.MultisigRedeemScript = policy.RedeemScript
+	vault.MultisigDescriptor = policy.Descriptor
+	vault.MultisigNetwork = policy.Network
+
+	if err := h.Repo.UpdateVaultMultisigPolicy(c.Context(), vault); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{
+		"status":  "SUCCESS",
+		"message": "Beneficiary signer added to multisig recovery policy.",
+		"multisig": fiber.Map{
+			"required":      vault.MultisigRequired,
+			"pubkeys":       vault.MultisigPubkeys,
+			"address":       vault.MultisigAddress,
+			"redeem_script": vault.MultisigRedeemScript,
+			"descriptor":    vault.MultisigDescriptor,
+			"network":       vault.MultisigNetwork,
+		},
+	})
+}
+
+func (h *VaultHandler) CreateProofInvoice(c fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "Missing target vault ID"})
+	}
+
+	invoice, err := h.Lightning.GenerateProofInvoice(c.Context(), id)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{
+		"status":  "SUCCESS",
+		"invoice": invoice,
+	})
+}
+
+func defaultDemoPubkeys(beneficiaryPubkey string) []string {
+	return []string{
+		beneficiaryPubkey,
+		"02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"03bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+	}
 }

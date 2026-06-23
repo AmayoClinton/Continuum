@@ -2,11 +2,13 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"continuum/api/internal/model"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 )
 
@@ -79,4 +81,112 @@ func (d *Database) GetVaultByID(ctx context.Context, id string) (*model.Vault, e
 		return nil, err
 	}
 	return &vault, nil
+}
+
+// ListVaults returns vaults in the order a demo operator expects to scan them.
+func (d *Database) ListVaults(ctx context.Context) ([]model.Vault, error) {
+	var vaults []model.Vault
+	query := `
+		SELECT
+			id,
+			alias,
+			beneficiary_pubkey,
+			encrypted_payload,
+			check_in_interval_seconds,
+			last_check_in_at,
+			status,
+			multisig_required,
+			multisig_pubkeys,
+			multisig_address,
+			multisig_redeem_script,
+			multisig_descriptor,
+			multisig_network
+		FROM vaults
+		ORDER BY last_check_in_at DESC;
+	`
+	if err := d.Db.SelectContext(ctx, &vaults, query); err != nil {
+		return nil, err
+	}
+	return vaults, nil
+}
+
+// TouchVault records a successful proof-of-life heartbeat.
+func (d *Database) TouchVault(ctx context.Context, id string) error {
+	result, err := d.Db.ExecContext(ctx, `
+		UPDATE vaults
+		SET last_check_in_at = NOW(),
+		    status = 'ACTIVE'
+		WHERE id = $1;
+	`, id)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (d *Database) UpdateVaultInterval(ctx context.Context, id string, seconds int) error {
+	result, err := d.Db.ExecContext(ctx, `
+		UPDATE vaults
+		SET check_in_interval_seconds = $2
+		WHERE id = $1;
+	`, id, seconds)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (d *Database) UpdateVaultMultisigPolicy(ctx context.Context, v *model.Vault) error {
+	result, err := d.Db.ExecContext(ctx, `
+		UPDATE vaults
+		SET multisig_required = $2,
+		    multisig_pubkeys = $3,
+		    multisig_address = $4,
+		    multisig_redeem_script = $5,
+		    multisig_descriptor = $6,
+		    multisig_network = $7
+		WHERE id = $1;
+	`,
+		v.ID,
+		v.MultisigRequired,
+		v.MultisigPubkeys,
+		v.MultisigAddress,
+		v.MultisigRedeemScript,
+		v.MultisigDescriptor,
+		v.MultisigNetwork,
+	)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (d *Database) NormalizeVaultArrays(v *model.Vault) {
+	if v.MultisigPubkeys == nil {
+		v.MultisigPubkeys = pq.StringArray{}
+	}
 }

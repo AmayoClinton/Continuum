@@ -77,6 +77,10 @@ func main() {
 	// 5. Structure API Routing Table Tree Layouts
 	api := app.Group("/api")
 	{
+		api.Get("/health", func(c fiber.Ctx) error {
+			return c.JSON(fiber.Map{"status": "ok", "service": "continuum-api"})
+		})
+		api.Get("/vaults", vaultHandler.ListVaults)
 		api.Post("/vaults", vaultHandler.CreateVault)
 		api.Get("/vaults/:id", recoveryHandler.GetVaultStatus)
 		

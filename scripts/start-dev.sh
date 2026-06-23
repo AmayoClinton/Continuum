@@ -1,4 +1,8 @@
 #!/bin/bash
+set -euo pipefail
+
+# Resolve repository root (script lives in ./scripts)
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Establish the structural codebase absolute root directory anchor
 ROOT_DIR="/workspaces/Continuum"

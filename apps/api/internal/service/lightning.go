@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/lightningnetwork/lnd/lnrpc"

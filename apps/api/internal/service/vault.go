@@ -21,6 +21,9 @@ func (s *VaultService) CreateNewVault(ctx context.Context, vault *model.Vault) e
 	if vault.CheckInIntervalSeconds <= 0 {
 		return errors.New("check-in interval window must be greater than zero")
 	}
+	if vault.MultisigRequired <= 0 || len(vault.MultisigPubkeys) == 0 || vault.MultisigDescriptor == "" {
+		return errors.New("missing multisig recovery policy")
+	}
 	return s.repo.InsertVault(ctx, vault)
 }
 
